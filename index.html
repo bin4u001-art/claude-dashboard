@@ -2,7 +2,7 @@
 <html lang="ko">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=800, user-scalable=yes">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1">
 <title>Claude 대화 대시보드</title>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
@@ -48,7 +48,7 @@
   .c-preview{font-size:22px;color:var(--sub);margin:6px 0 0 28px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;cursor:pointer}
   .c-body{margin:10px 0 0 28px}
   .lbl{display:flex;align-items:center;gap:8px;font-size:13px;font-weight:700;color:var(--accent);margin:10px 0 4px}
-  .txt{font-size:22px;line-height:1.55;white-space:pre-wrap;word-break:break-word;background:#faf9f6;border:1px solid var(--line);border-radius:8px;padding:10px 12px;max-height:520px;overflow:auto}
+  .txt{font-size:22px;line-height:1.55;white-space:pre-wrap;word-break:keep-all;overflow-wrap:anywhere;background:#faf9f6;border:1px solid var(--line);border-radius:8px;padding:10px 12px;max-height:520px;overflow:auto}
   .actions{display:flex;gap:6px;margin-top:10px;flex-wrap:wrap}
   .empty{text-align:center;color:var(--sub);padding:40px 0;font-size:16px}
   .form{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:16px}
@@ -76,6 +76,26 @@
   .modal{position:fixed;inset:0;background:rgba(0,0,0,.35);display:flex;align-items:center;justify-content:center;z-index:50}
   .modal .box{background:var(--card);border-radius:12px;padding:18px;width:680px;max-width:94vw}
   .modal textarea{width:100%;min-height:220px;font-family:monospace;font-size:13px;padding:8px;border:1px solid var(--line);border-radius:8px}
+
+  @media (max-width:700px){
+    header{flex-wrap:wrap;padding:8px 12px;row-gap:6px}
+    header h1{flex-basis:100%;font-size:18px}
+    .who{max-width:150px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+    nav{overflow-x:auto;-webkit-overflow-scrolling:touch;flex-wrap:nowrap;padding:8px 12px 0}
+    nav button{flex:none;font-size:14px;padding:8px 12px}
+    main{padding:12px}
+    .toolbar input[type=search]{min-width:0;flex:1 1 100%}
+    .toolbar select{flex:1 1 auto}
+    .c-title{font-size:18px}
+    .c-preview{font-size:16px}
+    .form input[type=text],.form textarea{font-size:16px}
+    .grid3{grid-template-columns:1fr}
+    .stats{grid-template-columns:repeat(2,1fr)}
+    .two{grid-template-columns:1fr}
+    .ic{width:36px;height:36px;font-size:20px;line-height:36px}
+    .btn{padding:8px 12px}
+    .c-meta,.c-body{margin-left:0}
+  }
 </style>
 </head>
 <body>
