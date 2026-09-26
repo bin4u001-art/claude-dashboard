@@ -121,6 +121,7 @@
   <h1>Claude 대화 대시보드</h1>
   <span id="modeBadge" class="badge hidden"></span>
   <span id="who" class="who"></span>
+  <button class="btn" id="btnTheme" title="색상 변경 (길게 누르면 기본색으로)">🎨</button>
   <button class="btn" id="btnSettings">설정</button>
   <button class="btn hidden" id="btnLogout">로그아웃</button>
 </header>
@@ -296,6 +297,7 @@ const COL = 'claude_logs';          // users/{uid}/claude_logs
 const LS_CFG = 'cdash_fbcfg';
 const LS_LOCAL = 'cdash_local_logs';
 const LS_MODE = 'cdash_mode';
+const LS_THEME = 'cdash_theme_color';
 
 /* ================= 공통 유틸 ================= */
 const $ = s => document.querySelector(s);
@@ -378,6 +380,41 @@ function makeFireStore(db, uid){
   };
 }
 
+/* ================= 색상 테마 ================= */
+function hexToRgb(hex){ hex=String(hex||'').replace('#',''); if(hex.length===3) hex=hex.split('').map(c=>c+c).join(''); const n=parseInt(hex,16); return [(n>>16)&255,(n>>8)&255,n&255]; }
+function mixRgb(rgb,target,amt){ return rgb.map((c,i)=>Math.round(c+(target[i]-c)*amt)); }
+function rgbToHex(rgb){ return '#'+rgb.map(v=>Math.max(0,Math.min(255,v)).toString(16).padStart(2,'0')).join(''); }
+function isValidHexColor(c){ return /^#[0-9a-fA-F]{6}$/.test(String(c||'')); }
+function applyTheme(color){
+  let style=document.getElementById('theme-style');
+  if(!style){ style=document.createElement('style'); style.id='theme-style'; document.head.appendChild(style); }
+  const metaTheme=document.querySelector('meta[name=theme-color]');
+  if(!isValidHexColor(color)){ style.textContent=''; if(metaTheme) metaTheme.setAttribute('content','#c96442'); return; }
+  const rgb=hexToRgb(color);
+  const soft=rgbToHex(mixRgb(rgb,[255,255,255],0.85));
+  const bgTint=rgbToHex(mixRgb(rgb,[255,255,255],0.94));
+  style.textContent=':root{--accent:'+color+' !important;--accent-soft:'+soft+' !important;--bg:'+bgTint+' !important;}';
+  if(metaTheme) metaTheme.setAttribute('content', color);
+}
+let themeInput=null;
+function ensureThemeInput(){
+  if(themeInput) return themeInput;
+  themeInput=document.createElement('input'); themeInput.type='color'; themeInput.id='theme-color-input';
+  themeInput.style.cssText='position:fixed;left:0;top:0;width:1px;height:1px;opacity:0;pointer-events:none;';
+  document.body.appendChild(themeInput);
+  themeInput.addEventListener('input', ()=>applyTheme(themeInput.value));
+  themeInput.addEventListener('change', ()=>{ lsSet(LS_THEME, themeInput.value); });
+  return themeInput;
+}
+function openThemePicker(){
+  const el=ensureThemeInput();
+  const btn=$('#btnTheme');
+  if(btn){ const r=btn.getBoundingClientRect(); el.style.left=r.left+'px'; el.style.top=r.top+'px'; el.style.width=Math.max(1,r.width)+'px'; el.style.height=Math.max(1,r.height)+'px'; }
+  el.value = lsGet(LS_THEME) || '#c96442';
+  el.click();
+}
+function resetTheme(){ lsDel(LS_THEME); applyTheme(null); }
+
 /* ================= 상태 ================= */
 let store=null, unsub=null, logs=[], editingId=null, curTab='list';
 let sortKey='createdAt', sortDir='desc';
@@ -414,6 +451,7 @@ function startLocal(){
 function init(){
   bindUI();
   clearForm();
+  applyTheme(lsGet(LS_THEME));
   const cfg=getConfig();
   if(!cfg || typeof firebase==='undefined'){
     if(!cfg) toast('Firebase 설정 전 — 로컬 모드로 실행합니다');
@@ -773,6 +811,8 @@ function bindUI(){
     if(typeof firebase!=='undefined' && firebase.apps.length && firebase.auth().currentUser) firebase.auth().signOut();
     else if(getConfig()){ if(unsub){unsub();unsub=null;} store=null; logs=[]; $('#modeBadge').classList.add('hidden'); $('#who').textContent=''; $('#btnLogout').classList.add('hidden'); showView('login'); }
   };
+  $('#btnTheme').onclick=openThemePicker;
+  $('#btnTheme').oncontextmenu=e=>{ e.preventDefault(); resetTheme(); return false; };
   $('#btnSettings').onclick=()=>{ let v=''; try { const c=lsGet(LS_CFG); v = c? JSON.stringify(JSON.parse(c),null,2) : ''; } catch(e){} $('#cfgText').value=v; $('#settingsModal').classList.remove('hidden'); };
   $('#cfgClose').onclick=()=>$('#settingsModal').classList.add('hidden');
   $('#cfgClear').onclick=()=>{ lsDel(LS_CFG); toast('설정을 지웠습니다'); setTimeout(()=>location.reload(),600); };
