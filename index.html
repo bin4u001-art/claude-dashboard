@@ -75,7 +75,7 @@
   #iAnswer{min-height:420px}
   .grid3{display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px}
   .chips{display:flex;flex-wrap:wrap;gap:4px;margin-top:6px;font-size:12px}
-  .type-row{display:flex;align-items:center;gap:6px;margin-bottom:6px;flex-wrap:wrap}
+  .type-row{display:inline-flex;align-items:center;gap:6px;margin-left:auto;flex-wrap:wrap}
   .type-btn.on{background:var(--accent);border-color:var(--accent);color:#fff}
   .checklist{margin-top:8px;background:#faf9f6;border:1px solid var(--line);border-radius:8px;padding:8px 10px}
   .checklist-item{display:flex;align-items:flex-start;gap:8px;padding:4px 0;font-size:16px;line-height:1.5}
@@ -112,6 +112,8 @@
     .c-title{font-size:18px}
     .c-preview{font-size:16px}
     .form input[type=text],.form textarea{font-size:16px}
+    .row>label{flex-wrap:wrap}
+    .type-row{margin-left:0}
     .grid3{grid-template-columns:1fr}
     .stats{grid-template-columns:repeat(2,1fr)}
     .two{grid-template-columns:1fr}
@@ -175,15 +177,14 @@
           <label>프롬프트 (내가 입력한 내용)
             <button class="btn" id="btnAddChecklist">체크박스 추가</button>
             <button class="btn" id="btnCopyPrompt">복사</button>
+            <span class="type-row" id="typeRow">
+              <button type="button" class="btn type-btn" data-type="진행">진행</button>
+              <button type="button" class="btn type-btn" data-type="검토">검토</button>
+              <button type="button" class="btn type-btn" data-type="수정">수정</button>
+              <button type="button" class="btn type-btn" data-type="디버깅">디버깅</button>
+              <span id="typeTag" class="tag hidden"></span>
+            </span>
           </label>
-          <div class="type-row" id="typeRow">
-            <span class="who">유형:</span>
-            <button type="button" class="btn type-btn" data-type="진행">진행</button>
-            <button type="button" class="btn type-btn" data-type="검토">검토</button>
-            <button type="button" class="btn type-btn" data-type="수정">수정</button>
-            <button type="button" class="btn type-btn" data-type="디버깅">디버깅</button>
-            <span id="typeTag" class="tag hidden"></span>
-          </div>
           <textarea id="iPrompt"></textarea>
           <div id="promptChecklist" class="checklist hidden"></div>
         </div>
