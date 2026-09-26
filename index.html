@@ -75,6 +75,12 @@
   #iAnswer{min-height:420px}
   .grid3{display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px}
   .chips{display:flex;flex-wrap:wrap;gap:4px;margin-top:6px;font-size:12px}
+  .type-row{display:flex;align-items:center;gap:6px;margin-bottom:6px;flex-wrap:wrap}
+  .type-btn.on{background:var(--accent);border-color:var(--accent);color:#fff}
+  .checklist{margin-top:8px;background:#faf9f6;border:1px solid var(--line);border-radius:8px;padding:8px 10px}
+  .checklist-item{display:flex;align-items:flex-start;gap:8px;padding:4px 0;font-size:16px;line-height:1.5}
+  .checklist-item .num{color:var(--sub);font-size:13px;min-width:22px;flex:none}
+  .checklist-item input[type=checkbox]{margin-top:4px;width:18px;height:18px;flex:none}
   .checks{display:flex;gap:16px;font-size:14px}
   .stats{display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin-bottom:16px}
   .stat{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:12px}
@@ -165,8 +171,22 @@
           <input type="text" id="iTitle" maxlength="200"></div>
         <div class="row"><label>날짜 <span class="who">(자동 입력됨, 필요하면 수정 가능)</span></label>
           <input type="datetime-local" id="iDate"></div>
-        <div class="row"><label>프롬프트 (내가 입력한 내용) <button class="btn" data-paste="iPrompt">클립보드 붙여넣기</button></label>
-          <textarea id="iPrompt"></textarea></div>
+        <div class="row">
+          <label>프롬프트 (내가 입력한 내용)
+            <button class="btn" id="btnAddChecklist">체크박스 추가</button>
+            <button class="btn" id="btnCopyPrompt">복사</button>
+          </label>
+          <div class="type-row" id="typeRow">
+            <span class="who">유형:</span>
+            <button type="button" class="btn type-btn" data-type="진행">진행</button>
+            <button type="button" class="btn type-btn" data-type="검토">검토</button>
+            <button type="button" class="btn type-btn" data-type="수정">수정</button>
+            <button type="button" class="btn type-btn" data-type="디버깅">디버깅</button>
+            <span id="typeTag" class="tag hidden"></span>
+          </div>
+          <textarea id="iPrompt"></textarea>
+          <div id="promptChecklist" class="checklist hidden"></div>
+        </div>
         <div class="row"><label>답변 (AI 답변) <button class="btn" data-paste="iAnswer">클립보드 붙여넣기</button></label>
           <textarea id="iAnswer"></textarea></div>
         <div class="grid3">
@@ -419,6 +439,7 @@ function resetTheme(){ lsDel(LS_THEME); applyTheme(null); }
 let store=null, unsub=null, logs=[], editingId=null, curTab='list';
 let sortKey='createdAt', sortDir='desc';
 let charts={};
+let currentPromptType=null;
 const MODEL_PRESETS=['Claude Code','Claude 챗팅','GPT','Gemini'];
 function toInputDT(ms){ const d=new Date(ms); return d.getFullYear()+'-'+pad(d.getMonth()+1)+'-'+pad(d.getDate())+'T'+pad(d.getHours())+':'+pad(d.getMinutes()); }
 
@@ -631,6 +652,10 @@ function clearForm(){
   $('#iDate').value=toInputDT(Date.now());
   $('#iFav').checked=false; $('#iTpl').checked=false;
   $('#editInfo').textContent=''; $('#btnSave').textContent='저장';
+  resetPromptChecklist();
+  currentPromptType=null;
+  document.querySelectorAll('.type-btn').forEach(b=>b.classList.remove('on'));
+  $('#typeTag').classList.add('hidden');
 }
 function startEdit(l){
   clearForm(); editingId=l.id;
@@ -647,6 +672,43 @@ function renderTagChips(){
 }
 function renderModelChips(){
   $('#modelChips').innerHTML=MODEL_PRESETS.map(m=>'<span class="tag" data-mchip="'+esc(m)+'">'+esc(m)+'</span>').join('');
+}
+function setPromptType(t){
+  currentPromptType = currentPromptType===t ? null : t;
+  document.querySelectorAll('.type-btn').forEach(b=>b.classList.toggle('on', b.dataset.type===currentPromptType));
+  const tag=$('#typeTag');
+  if(currentPromptType){ tag.textContent='['+currentPromptType+']'; tag.classList.remove('hidden'); }
+  else tag.classList.add('hidden');
+}
+function resetPromptChecklist(){
+  const box=$('#promptChecklist');
+  box.classList.add('hidden'); box.innerHTML=''; delete box.dataset.lines;
+}
+function renderPromptChecklist(){
+  const lines=$('#iPrompt').value.split('\n').map(l=>l.trim()).filter(Boolean);
+  if(!lines.length){ toast('프롬프트 내용이 없습니다'); resetPromptChecklist(); return; }
+  const box=$('#promptChecklist');
+  box.innerHTML=lines.map((l,i)=>
+    '<label class="checklist-item"><input type="checkbox" checked><span class="num">'+(i+1)+'.</span><span>'+esc(l)+'</span></label>'
+  ).join('');
+  box.dataset.lines=JSON.stringify(lines);
+  box.classList.remove('hidden');
+}
+function copyPromptSelection(){
+  const box=$('#promptChecklist');
+  let text;
+  if(!box.classList.contains('hidden') && box.dataset.lines){
+    const lines=JSON.parse(box.dataset.lines);
+    const boxes=[...box.querySelectorAll('input[type=checkbox]')];
+    const checked=boxes.map((c,i)=>c.checked? lines[i] : null).filter(x=>x!==null);
+    if(!checked.length){ toast('선택된 문장이 없습니다'); return; }
+    text=checked.join('\n');
+  } else {
+    text=$('#iPrompt').value;
+    if(!text.trim()){ toast('프롬프트 내용이 없습니다'); return; }
+  }
+  if(currentPromptType) text='['+currentPromptType+']\n'+text;
+  copyText(text);
 }
 let saving=false;
 async function saveForm(){
@@ -796,6 +858,10 @@ function bindUI(){
   $('#tagChips').addEventListener('click', e=>{ const c=e.target.closest('[data-chip]'); if(!c) return;
     const t=parseTags($('#iTags').value); if(!t.includes(c.dataset.chip)) t.push(c.dataset.chip); $('#iTags').value=t.join(', '); });
   $('#modelChips').addEventListener('click', e=>{ const c=e.target.closest('[data-mchip]'); if(!c) return; $('#iModel').value=c.dataset.mchip; });
+  document.querySelectorAll('.type-btn').forEach(b=>b.addEventListener('click', ()=>setPromptType(b.dataset.type)));
+  $('#btnAddChecklist').onclick=renderPromptChecklist;
+  $('#btnCopyPrompt').onclick=copyPromptSelection;
+  $('#iPrompt').addEventListener('input', resetPromptChecklist);
   document.querySelectorAll('[data-paste]').forEach(b=>b.addEventListener('click', async ()=>{
     try { const t=await navigator.clipboard.readText(); const ta=$('#'+b.dataset.paste); ta.value = ta.value? ta.value+'\n'+t : t; }
     catch(e){ toast('클립보드 접근이 막혀 있습니다. 칸을 길게 눌러 붙여넣어 주세요'); }
