@@ -4,6 +4,11 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1">
 <title>Claude 대화 대시보드</title>
+<link rel="manifest" href="manifest.json">
+<meta name="theme-color" content="#c96442">
+<link rel="apple-touch-icon" href="icon-192.png">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="Claude 대시보드">
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
@@ -47,6 +52,18 @@
   .tpl{background:#e6f2ea;color:var(--ok);border-radius:10px;padding:1px 8px}
   .c-preview{font-size:22px;color:var(--sub);margin:6px 0 0 28px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;cursor:pointer}
   .c-body{margin:10px 0 0 28px}
+  .tbl-wrap{overflow-x:auto;background:var(--card);border:1px solid var(--line);border-radius:10px}
+  table.tbl{width:100%;border-collapse:collapse;font-size:14px}
+  table.tbl th,table.tbl td{padding:8px 10px;text-align:left;white-space:nowrap;border-bottom:1px solid var(--line)}
+  table.tbl th{cursor:pointer;color:var(--sub);font-weight:700;user-select:none;background:var(--bg);position:sticky;top:0}
+  table.tbl th .arrow{color:var(--accent);margin-left:3px}
+  table.tbl tbody tr{cursor:pointer}
+  table.tbl tbody tr:hover{background:var(--accent-soft)}
+  table.tbl td.t-title{white-space:normal;font-weight:600;min-width:160px}
+  table.tbl td.t-tags{white-space:normal;max-width:220px}
+  table.tbl tr.detail-row{cursor:default}
+  table.tbl tr.detail-row:hover{background:none}
+  table.tbl tr.detail-row td{white-space:normal;background:#faf9f6}
   .lbl{display:flex;align-items:center;gap:8px;font-size:13px;font-weight:700;color:var(--accent);margin:10px 0 4px}
   .txt{font-size:22px;line-height:1.55;white-space:pre-wrap;word-break:keep-all;overflow-wrap:anywhere;background:#faf9f6;border:1px solid var(--line);border-radius:8px;padding:10px 12px;max-height:520px;overflow:auto}
   .actions{display:flex;gap:6px;margin-top:10px;flex-wrap:wrap}
@@ -54,8 +71,9 @@
   .form{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:16px}
   .row{margin-bottom:12px}
   .row>label{display:flex;align-items:center;gap:8px;font-size:13px;font-weight:700;margin-bottom:4px}
-  .form input[type=text],.form textarea{width:100%;font-size:22px;padding:8px 10px;border:1px solid var(--line);border-radius:8px;font-family:inherit;background:#fff}
+  .form input[type=text],.form input[type=datetime-local],.form textarea{width:100%;font-size:22px;padding:8px 10px;border:1px solid var(--line);border-radius:8px;font-family:inherit;background:#fff}
   .form textarea{min-height:180px;resize:vertical;line-height:1.5}
+  #iAnswer{min-height:420px}
   .grid3{display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px}
   .chips{display:flex;flex-wrap:wrap;gap:4px;margin-top:6px;font-size:12px}
   .checks{display:flex;gap:16px;font-size:14px}
@@ -134,11 +152,6 @@
         <select id="fProject"><option value="">전체 프로젝트</option></select>
         <select id="fModel"><option value="">전체 모델</option></select>
         <label><input type="checkbox" id="fStar"> ★만</label>
-        <select id="fSort">
-          <option value="new">최신순</option>
-          <option value="old">오래된순</option>
-          <option value="title">제목순</option>
-        </select>
         <button class="btn" id="btnReset">초기화</button>
       </div>
       <div class="count" id="count"></div>
@@ -150,6 +163,8 @@
       <div class="form">
         <div class="row"><label>제목 <span class="who">(비우면 프롬프트 첫 줄로 자동 생성)</span></label>
           <input type="text" id="iTitle" maxlength="200"></div>
+        <div class="row"><label>날짜 <span class="who">(자동 입력됨, 필요하면 수정 가능)</span></label>
+          <input type="datetime-local" id="iDate"></div>
         <div class="row"><label>프롬프트 (내가 입력한 내용) <button class="btn" data-paste="iPrompt">클립보드 붙여넣기</button></label>
           <textarea id="iPrompt"></textarea></div>
         <div class="row"><label>답변 (AI 답변) <button class="btn" data-paste="iAnswer">클립보드 붙여넣기</button></label>
@@ -163,7 +178,8 @@
             <datalist id="dlProject"></datalist></div>
           <div class="row"><label>모델</label>
             <input type="text" id="iModel" list="dlModel" placeholder="예: Claude Opus">
-            <datalist id="dlModel"></datalist></div>
+            <datalist id="dlModel"></datalist>
+            <div class="chips" id="modelChips"></div></div>
         </div>
         <div class="row"><label>메모</label>
           <textarea id="iNote" style="min-height:80px"></textarea></div>
@@ -334,15 +350,20 @@ function makeFireStore(db, uid){
       data.updatedAt = FV.serverTimestamp();
       return col.add(data);
     },
-    update(id,d){ const data={...d}; delete data.id; delete data.createdAt; data.updatedAt=FV.serverTimestamp(); return col.doc(id).update(data); },
+    update(id,d){ const data={...d}; delete data.id;
+      if(data.createdAt!=null) data.createdAt=TS.fromMillis(data.createdAt); else delete data.createdAt;
+      data.updatedAt=FV.serverTimestamp(); return col.doc(id).update(data); },
     remove(id){ return col.doc(id).delete(); }
   };
 }
 
 /* ================= 상태 ================= */
 let store=null, unsub=null, logs=[], editingId=null, curTab='list';
+let sortKey='createdAt', sortDir='desc';
 const openIds=new Set();
 let charts={};
+const MODEL_PRESETS=['Claude Code','Claude 챗팅','GPT','Gemini'];
+function toInputDT(ms){ const d=new Date(ms); return d.getFullYear()+'-'+pad(d.getMonth()+1)+'-'+pad(d.getDate())+'T'+pad(d.getHours())+':'+pad(d.getMinutes()); }
 
 function onData(arr){ logs=arr; refreshFilters(); renderList(); renderTpl(); if(curTab==='stats') renderStats(); }
 
@@ -369,6 +390,7 @@ function startLocal(){
 
 function init(){
   bindUI();
+  clearForm();
   const cfg=getConfig();
   if(!cfg || typeof firebase==='undefined'){
     if(!cfg) toast('Firebase 설정 전 — 로컬 모드로 실행합니다');
@@ -413,7 +435,7 @@ function switchTab(t){
   document.querySelectorAll('#tabs button').forEach(b=>b.classList.toggle('on', b.dataset.tab===t));
   ['list','form','stats','tpl','backup'].forEach(k=>$('#tab-'+k).classList.toggle('hidden', k!==t));
   if(t==='stats') renderStats();
-  if(t==='form') renderTagChips();
+  if(t==='form'){ renderTagChips(); renderModelChips(); }
   if(t==='backup') updateMigrate();
   window.scrollTo(0,0);
 }
@@ -435,7 +457,7 @@ function refreshFilters(){
 }
 function filtered(){
   const words=$('#q').value.trim().toLowerCase().split(/\s+/).filter(Boolean);
-  const tag=$('#fTag').value, proj=$('#fProject').value, model=$('#fModel').value, star=$('#fStar').checked, sort=$('#fSort').value;
+  const tag=$('#fTag').value, proj=$('#fProject').value, model=$('#fModel').value, star=$('#fStar').checked;
   let r=logs.filter(l=>{
     if(tag && !l.tags.includes(tag)) return false;
     if(proj && l.project!==proj) return false;
@@ -447,28 +469,29 @@ function filtered(){
     }
     return true;
   });
-  if(sort==='old') r.sort((a,b)=>a.createdAt-b.createdAt);
-  else if(sort==='title') r.sort((a,b)=>a.title.localeCompare(b.title,'ko'));
-  else r.sort((a,b)=>b.createdAt-a.createdAt);
+  const dir = sortDir==='asc'? 1 : -1;
+  r.sort((a,b)=>{
+    let av,bv;
+    if(sortKey==='tags'){ av=a.tags.join(','); bv=b.tags.join(','); }
+    else { av=a[sortKey]; bv=b[sortKey]; }
+    if(typeof av==='string' || typeof bv==='string') return dir*String(av||'').localeCompare(String(bv||''),'ko');
+    return dir*((av||0)-(bv||0));
+  });
   return r;
 }
-function cardHtml(l){
+const SORT_COLS=[['createdAt','날짜'],['title','제목'],['tags','태그'],['project','프로젝트'],['model','모델']];
+function rowHtml(l){
   const open=openIds.has(l.id);
-  const meta=[
-    l.model? '<span>'+esc(l.model)+'</span>' : '',
-    l.project? '<span>📁 '+esc(l.project)+'</span>' : '',
-    l.isTemplate? '<span class="tpl">템플릿</span>' : '',
-    ...l.tags.map(t=>'<span class="tag" data-act="tag" data-tag="'+esc(t)+'">#'+esc(t)+'</span>')
-  ].join('');
-  return '<div class="card" data-id="'+esc(l.id)+'">'+
-    '<div class="card-head" data-act="toggle">'+
-      '<button class="ic star'+(l.favorite?' on':'')+'" data-act="star" title="즐겨찾기">'+(l.favorite?'★':'☆')+'</button>'+
-      '<div class="c-title">'+esc(l.title||autoTitle(l.prompt))+'</div>'+
-      '<span class="c-date">'+fmtDate(l.createdAt)+'</span>'+
-    '</div>'+
-    (meta? '<div class="c-meta">'+meta+'</div>' : '')+
-    (open? '' : '<div class="c-preview" data-act="toggle">'+esc(l.prompt.slice(0,200).replace(/\s+/g,' '))+'</div>')+
-    (open? '<div class="c-body">'+
+  let html='<tr data-id="'+esc(l.id)+'" data-act="toggle">'+
+    '<td>'+fmtDate(l.createdAt)+'</td>'+
+    '<td class="t-title">'+(l.isTemplate?'<span class="tpl">템플릿</span> ':'')+esc(l.title||autoTitle(l.prompt))+'</td>'+
+    '<td class="t-tags">'+l.tags.map(t=>'<span class="tag" data-act="tag" data-tag="'+esc(t)+'">#'+esc(t)+'</span>').join(' ')+'</td>'+
+    '<td>'+esc(l.project)+'</td>'+
+    '<td>'+esc(l.model)+'</td>'+
+    '<td><button class="ic star'+(l.favorite?' on':'')+'" data-act="star" title="즐겨찾기">'+(l.favorite?'★':'☆')+'</button></td>'+
+  '</tr>';
+  if(open){
+    html+='<tr class="detail-row" data-id="'+esc(l.id)+'"><td colspan="6">'+
       '<div class="lbl">프롬프트 <button class="btn" data-act="copyP">복사</button></div><div class="txt">'+esc(l.prompt)+'</div>'+
       '<div class="lbl">답변 <button class="btn" data-act="copyA">복사</button></div><div class="txt">'+esc(l.answer)+'</div>'+
       (l.note? '<div class="lbl">메모</div><div class="txt">'+esc(l.note)+'</div>' : '')+
@@ -477,14 +500,19 @@ function cardHtml(l){
         '<button class="btn" data-act="tplToggle">'+(l.isTemplate?'템플릿 해제':'템플릿 지정')+'</button>'+
         '<button class="btn" data-act="reuse">이 프롬프트로 새 기록</button>'+
         '<button class="btn warn" data-act="del">삭제</button>'+
-      '</div></div>' : '')+
-  '</div>';
+      '</div></td></tr>';
+  }
+  return html;
 }
 function renderList(){
   const r=filtered();
   $('#count').textContent='전체 '+logs.length+'건 중 '+r.length+'건';
-  $('#list').innerHTML = r.length? r.map(cardHtml).join('') :
-    '<div class="empty">'+(logs.length? '조건에 맞는 기록이 없습니다.' : '아직 기록이 없습니다. [새 기록] 탭에서 대화를 붙여넣어 보세요.')+'</div>';
+  if(!r.length){
+    $('#list').innerHTML='<div class="empty">'+(logs.length? '조건에 맞는 기록이 없습니다.' : '아직 기록이 없습니다. [새 기록] 탭에서 대화를 붙여넣어 보세요.')+'</div>';
+    return;
+  }
+  const thead='<tr>'+SORT_COLS.map(([k,label])=>'<th data-sort="'+k+'">'+label+(sortKey===k? ' <span class="arrow">'+(sortDir==='asc'?'▲':'▼')+'</span>' : '')+'</th>').join('')+'<th>★</th></tr>';
+  $('#list').innerHTML='<div class="tbl-wrap"><table class="tbl"><thead>'+thead+'</thead><tbody>'+r.map(rowHtml).join('')+'</tbody></table></div>';
 }
 function renderTpl(){
   const r=logs.filter(l=>l.isTemplate).sort((a,b)=>a.title.localeCompare(b.title,'ko'));
@@ -527,12 +555,14 @@ async function handleAct(e){
 function clearForm(){
   editingId=null;
   ['iTitle','iPrompt','iAnswer','iTags','iProject','iModel','iNote'].forEach(id=>$('#'+id).value='');
+  $('#iDate').value=toInputDT(Date.now());
   $('#iFav').checked=false; $('#iTpl').checked=false;
   $('#editInfo').textContent=''; $('#btnSave').textContent='저장';
 }
 function startEdit(l){
   clearForm(); editingId=l.id;
   $('#iTitle').value=l.title; $('#iPrompt').value=l.prompt; $('#iAnswer').value=l.answer;
+  $('#iDate').value=toInputDT(l.createdAt);
   $('#iTags').value=l.tags.join(', '); $('#iProject').value=l.project; $('#iModel').value=l.model; $('#iNote').value=l.note;
   $('#iFav').checked=l.favorite; $('#iTpl').checked=l.isTemplate;
   $('#editInfo').textContent='수정 중: '+fmtDate(l.createdAt)+' 기록'; $('#btnSave').textContent='수정 저장';
@@ -542,17 +572,25 @@ function renderTagChips(){
   const tags=uniq(logs.flatMap(l=>l.tags)).slice(0,40);
   $('#tagChips').innerHTML=tags.map(t=>'<span class="tag" data-chip="'+esc(t)+'">#'+esc(t)+'</span>').join('');
 }
+function renderModelChips(){
+  $('#modelChips').innerHTML=MODEL_PRESETS.map(m=>'<span class="tag" data-mchip="'+esc(m)+'">'+esc(m)+'</span>').join('');
+}
 let saving=false;
 async function saveForm(){
   if(saving || !store) return;
   const prompt=$('#iPrompt').value, answer=$('#iAnswer').value;
   if(!prompt.trim() && !answer.trim()){ toast('프롬프트나 답변 중 하나는 입력해야 합니다'); return; }
-  const createdMs = editingId? (logs.find(x=>x.id===editingId)||{}).createdAt : Date.now();
+  const dtVal=$('#iDate').value;
+  let createdMs;
+  if(dtVal) createdMs=new Date(dtVal).getTime();
+  else if(editingId){ const prev=logs.find(x=>x.id===editingId); createdMs=prev? prev.createdAt : Date.now(); }
+  else createdMs=Date.now();
   const data={
     title: $('#iTitle').value.trim() || autoTitle(prompt || answer),
     prompt, answer, tags: parseTags($('#iTags').value),
     project: $('#iProject').value.trim(), model: $('#iModel').value.trim(), note: $('#iNote').value,
-    favorite: $('#iFav').checked, isTemplate: $('#iTpl').checked, dateKey: dateKey(createdMs||Date.now())
+    favorite: $('#iFav').checked, isTemplate: $('#iTpl').checked,
+    createdAt: createdMs, dateKey: dateKey(createdMs)
   };
   saving=true; $('#btnSave').disabled=true;
   try {
@@ -669,15 +707,20 @@ function parseConfig(text){
 
 /* ================= 이벤트 연결 ================= */
 function bindUI(){
-  $('#tabs').addEventListener('click', e=>{ const b=e.target.closest('button[data-tab]'); if(!b) return; if(b.dataset.tab==='form' && !editingId) clearForm(); switchTab(b.dataset.tab); });
-  $('#list').addEventListener('click', handleAct);
+  $('#tabs').addEventListener('click', e=>{ const b=e.target.closest('button[data-tab]'); if(!b) return; switchTab(b.dataset.tab); });
+  $('#list').addEventListener('click', e=>{
+    const th=e.target.closest('th[data-sort]');
+    if(th){ const k=th.dataset.sort; if(sortKey===k) sortDir=sortDir==='asc'?'desc':'asc'; else { sortKey=k; sortDir = k==='createdAt'? 'desc' : 'asc'; } renderList(); return; }
+    handleAct(e);
+  });
   $('#tplList').addEventListener('click', handleAct);
-  ['#q','#fTag','#fProject','#fModel','#fStar','#fSort'].forEach(s=>$(s).addEventListener(s==='#q'?'input':'change', renderList));
-  $('#btnReset').onclick=()=>{ $('#q').value=''; ['#fTag','#fProject','#fModel'].forEach(s=>$(s).value=''); $('#fStar').checked=false; $('#fSort').value='new'; renderList(); };
+  ['#q','#fTag','#fProject','#fModel','#fStar'].forEach(s=>$(s).addEventListener(s==='#q'?'input':'change', renderList));
+  $('#btnReset').onclick=()=>{ $('#q').value=''; ['#fTag','#fProject','#fModel'].forEach(s=>$(s).value=''); $('#fStar').checked=false; sortKey='createdAt'; sortDir='desc'; renderList(); };
   $('#btnSave').onclick=saveForm;
   $('#btnClear').onclick=clearForm;
   $('#tagChips').addEventListener('click', e=>{ const c=e.target.closest('[data-chip]'); if(!c) return;
     const t=parseTags($('#iTags').value); if(!t.includes(c.dataset.chip)) t.push(c.dataset.chip); $('#iTags').value=t.join(', '); });
+  $('#modelChips').addEventListener('click', e=>{ const c=e.target.closest('[data-mchip]'); if(!c) return; $('#iModel').value=c.dataset.mchip; });
   document.querySelectorAll('[data-paste]').forEach(b=>b.addEventListener('click', async ()=>{
     try { const t=await navigator.clipboard.readText(); const ta=$('#'+b.dataset.paste); ta.value = ta.value? ta.value+'\n'+t : t; }
     catch(e){ toast('클립보드 접근이 막혀 있습니다. 칸을 길게 눌러 붙여넣어 주세요'); }
@@ -705,6 +748,9 @@ function bindUI(){
 }
 
 init();
+if('serviceWorker' in navigator){
+  window.addEventListener('load', ()=>{ navigator.serviceWorker.register('sw.js').catch(()=>{}); });
+}
 </script>
 </body>
 </html>
