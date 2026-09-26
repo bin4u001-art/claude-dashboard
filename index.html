@@ -1,0 +1,690 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=800, user-scalable=yes">
+<title>Claude 대화 대시보드</title>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<style>
+  :root{
+    --bg:#f5f3ee; --card:#ffffff; --line:#e2ddd3; --text:#2b2a27; --sub:#77736b;
+    --accent:#c96442; --accent-soft:#f6e6de; --star:#e0a100; --danger:#c0392b; --ok:#2e7d4f;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--text);font-family:-apple-system,"Malgun Gothic","Apple SD Gothic Neo","Noto Sans KR",sans-serif;font-size:16px}
+  .hidden{display:none!important}
+  header{position:sticky;top:0;z-index:10;background:var(--card);border-bottom:1px solid var(--line);padding:10px 16px;display:flex;align-items:center;gap:10px}
+  header h1{font-size:20px;margin:0;flex:1}
+  .badge{font-size:12px;padding:2px 8px;border-radius:10px;background:var(--accent-soft);color:var(--accent)}
+  .badge.local{background:#e8eef7;color:#3a5a8c}
+  .who{font-size:12px;color:var(--sub)}
+  .btn{font-size:12px;padding:4px 8px;border:1px solid var(--line);background:var(--card);color:var(--text);border-radius:6px;cursor:pointer;white-space:nowrap}
+  .btn:hover{border-color:var(--accent)}
+  .btn.pri{background:var(--accent);border-color:var(--accent);color:#fff}
+  .btn.warn{color:var(--danger);border-color:#e7c3be}
+  .btn.warn.confirm{background:var(--danger);color:#fff}
+  .ic{width:20px;height:20px;padding:0;border:none;background:none;cursor:pointer;font-size:16px;line-height:20px;text-align:center;flex:none}
+  .ic.star{color:#c9c4b8}.ic.star.on{color:var(--star)}
+  nav{display:flex;gap:4px;padding:10px 16px 0;border-bottom:1px solid var(--line);background:var(--bg)}
+  nav button{font-size:15px;padding:8px 14px;border:1px solid transparent;border-bottom:none;background:none;border-radius:8px 8px 0 0;cursor:pointer;color:var(--sub)}
+  nav button.on{background:var(--card);border-color:var(--line);color:var(--text);font-weight:600;margin-bottom:-1px}
+  main{padding:16px}
+  .toolbar{display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin-bottom:12px}
+  .toolbar input[type=search]{flex:1;min-width:220px;font-size:16px;padding:6px 10px;border:1px solid var(--line);border-radius:6px}
+  select,.toolbar label{font-size:13px}
+  select{padding:4px 6px;border:1px solid var(--line);border-radius:6px;background:var(--card)}
+  .count{font-size:13px;color:var(--sub);margin-bottom:8px}
+  .card{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:12px 14px;margin-bottom:10px}
+  .card-head{display:flex;align-items:center;gap:8px;cursor:pointer}
+  .c-title{flex:1;font-size:22px;font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .c-date{font-size:12px;color:var(--sub);white-space:nowrap}
+  .c-meta{font-size:12px;color:var(--sub);margin:4px 0 0 28px;display:flex;flex-wrap:wrap;gap:6px}
+  .tag{background:var(--accent-soft);color:var(--accent);border-radius:10px;padding:1px 8px;cursor:pointer}
+  .tpl{background:#e6f2ea;color:var(--ok);border-radius:10px;padding:1px 8px}
+  .c-preview{font-size:22px;color:var(--sub);margin:6px 0 0 28px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;cursor:pointer}
+  .c-body{margin:10px 0 0 28px}
+  .lbl{display:flex;align-items:center;gap:8px;font-size:13px;font-weight:700;color:var(--accent);margin:10px 0 4px}
+  .txt{font-size:22px;line-height:1.55;white-space:pre-wrap;word-break:break-word;background:#faf9f6;border:1px solid var(--line);border-radius:8px;padding:10px 12px;max-height:520px;overflow:auto}
+  .actions{display:flex;gap:6px;margin-top:10px;flex-wrap:wrap}
+  .empty{text-align:center;color:var(--sub);padding:40px 0;font-size:16px}
+  .form{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:16px}
+  .row{margin-bottom:12px}
+  .row>label{display:flex;align-items:center;gap:8px;font-size:13px;font-weight:700;margin-bottom:4px}
+  .form input[type=text],.form textarea{width:100%;font-size:22px;padding:8px 10px;border:1px solid var(--line);border-radius:8px;font-family:inherit;background:#fff}
+  .form textarea{min-height:180px;resize:vertical;line-height:1.5}
+  .grid3{display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px}
+  .chips{display:flex;flex-wrap:wrap;gap:4px;margin-top:6px;font-size:12px}
+  .checks{display:flex;gap:16px;font-size:14px}
+  .stats{display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin-bottom:16px}
+  .stat{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:12px}
+  .stat .n{font-size:28px;font-weight:700}
+  .stat .l{font-size:12px;color:var(--sub)}
+  .chartbox{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:12px;margin-bottom:12px}
+  .chartbox h3{margin:0 0 8px;font-size:14px}
+  .two{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+  .panel{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:16px;margin-bottom:12px}
+  .panel h3{margin:0 0 8px;font-size:15px}
+  .panel p{font-size:13px;color:var(--sub);margin:0 0 10px}
+  .center{max-width:520px;margin:60px auto;text-align:center}
+  .center h2{font-size:22px}
+  #toast{position:fixed;left:50%;bottom:24px;transform:translateX(-50%);background:#2b2a27;color:#fff;padding:8px 16px;border-radius:8px;font-size:14px;opacity:0;transition:opacity .2s;pointer-events:none;z-index:99}
+  #toast.show{opacity:1}
+  .modal{position:fixed;inset:0;background:rgba(0,0,0,.35);display:flex;align-items:center;justify-content:center;z-index:50}
+  .modal .box{background:var(--card);border-radius:12px;padding:18px;width:680px;max-width:94vw}
+  .modal textarea{width:100%;min-height:220px;font-family:monospace;font-size:13px;padding:8px;border:1px solid var(--line);border-radius:8px}
+</style>
+</head>
+<body>
+
+<header>
+  <h1>Claude 대화 대시보드</h1>
+  <span id="modeBadge" class="badge hidden"></span>
+  <span id="who" class="who"></span>
+  <button class="btn" id="btnSettings">설정</button>
+  <button class="btn hidden" id="btnLogout">로그아웃</button>
+</header>
+
+<!-- 로그인 화면 -->
+<section id="loginView" class="center hidden">
+  <h2>로그인이 필요합니다</h2>
+  <p class="who">Firebase에 저장된 대화 기록은 본인 계정으로만 볼 수 있습니다.</p>
+  <p><button class="btn pri" id="btnLogin">Google 계정으로 로그인</button></p>
+  <p><button class="btn" id="btnUseLocal">로그인 없이 이 기기에만 저장(로컬 모드)</button></p>
+</section>
+
+<!-- 메인 앱 -->
+<section id="appView" class="hidden">
+  <nav id="tabs">
+    <button data-tab="list" class="on">목록</button>
+    <button data-tab="form">새 기록</button>
+    <button data-tab="stats">통계</button>
+    <button data-tab="tpl">템플릿</button>
+    <button data-tab="backup">백업</button>
+  </nav>
+  <main>
+    <!-- 목록 -->
+    <div id="tab-list">
+      <div class="toolbar">
+        <input type="search" id="q" placeholder="검색 (제목·프롬프트·답변·메모·태그, 띄어쓰기=AND)">
+        <select id="fTag"><option value="">전체 태그</option></select>
+        <select id="fProject"><option value="">전체 프로젝트</option></select>
+        <select id="fModel"><option value="">전체 모델</option></select>
+        <label><input type="checkbox" id="fStar"> ★만</label>
+        <select id="fSort">
+          <option value="new">최신순</option>
+          <option value="old">오래된순</option>
+          <option value="title">제목순</option>
+        </select>
+        <button class="btn" id="btnReset">초기화</button>
+      </div>
+      <div class="count" id="count"></div>
+      <div id="list"></div>
+    </div>
+
+    <!-- 새 기록 / 수정 -->
+    <div id="tab-form" class="hidden">
+      <div class="form">
+        <div class="row"><label>제목 <span class="who">(비우면 프롬프트 첫 줄로 자동 생성)</span></label>
+          <input type="text" id="iTitle" maxlength="200"></div>
+        <div class="row"><label>프롬프트 (내가 입력한 내용) <button class="btn" data-paste="iPrompt">클립보드 붙여넣기</button></label>
+          <textarea id="iPrompt"></textarea></div>
+        <div class="row"><label>답변 (AI 답변) <button class="btn" data-paste="iAnswer">클립보드 붙여넣기</button></label>
+          <textarea id="iAnswer"></textarea></div>
+        <div class="grid3">
+          <div class="row"><label>태그 <span class="who">(쉼표로 구분)</span></label>
+            <input type="text" id="iTags" placeholder="예: firebase, 버그수정">
+            <div class="chips" id="tagChips"></div></div>
+          <div class="row"><label>프로젝트</label>
+            <input type="text" id="iProject" list="dlProject" placeholder="예: 아이디어 메모장">
+            <datalist id="dlProject"></datalist></div>
+          <div class="row"><label>모델</label>
+            <input type="text" id="iModel" list="dlModel" placeholder="예: Claude Opus">
+            <datalist id="dlModel"></datalist></div>
+        </div>
+        <div class="row"><label>메모</label>
+          <textarea id="iNote" style="min-height:80px"></textarea></div>
+        <div class="row checks">
+          <label><input type="checkbox" id="iFav"> ★ 즐겨찾기</label>
+          <label><input type="checkbox" id="iTpl"> 프롬프트 템플릿으로 지정</label>
+        </div>
+        <div class="actions">
+          <button class="btn pri" id="btnSave">저장</button>
+          <button class="btn" id="btnClear">비우기</button>
+          <span class="who" id="editInfo"></span>
+        </div>
+      </div>
+    </div>
+
+    <!-- 통계 -->
+    <div id="tab-stats" class="hidden">
+      <div class="stats">
+        <div class="stat"><div class="n" id="sTotal">0</div><div class="l">전체 기록</div></div>
+        <div class="stat"><div class="n" id="sMonth">0</div><div class="l">이번 달</div></div>
+        <div class="stat"><div class="n" id="sFav">0</div><div class="l">즐겨찾기</div></div>
+        <div class="stat"><div class="n" id="sTpl">0</div><div class="l">템플릿</div></div>
+      </div>
+      <div class="chartbox"><h3>최근 30일 저장 건수</h3><canvas id="chDaily" height="90"></canvas></div>
+      <div class="two">
+        <div class="chartbox"><h3>태그 상위 10</h3><canvas id="chTag" height="220"></canvas></div>
+        <div class="chartbox"><h3>모델별</h3><canvas id="chModel" height="220"></canvas></div>
+      </div>
+    </div>
+
+    <!-- 템플릿 -->
+    <div id="tab-tpl" class="hidden">
+      <div class="count">목록에서 기록을 열고 [템플릿 지정]을 누르거나, 새 기록에서 체크하면 여기에 모입니다.</div>
+      <div id="tplList"></div>
+    </div>
+
+    <!-- 백업 -->
+    <div id="tab-backup" class="hidden">
+      <div class="panel">
+        <h3>내보내기</h3>
+        <p>전체 기록을 파일로 저장합니다. JSON은 다시 가져오기(복원)에 쓸 수 있습니다.</p>
+        <div class="actions">
+          <button class="btn pri" id="exJson">JSON</button>
+          <button class="btn" id="exXlsx">엑셀(.xlsx)</button>
+          <button class="btn" id="exMd">마크다운(.md)</button>
+        </div>
+      </div>
+      <div class="panel">
+        <h3>가져오기 (JSON 복원)</h3>
+        <p>이 대시보드에서 내보낸 JSON 파일을 불러옵니다. 같은 날짜·제목·프롬프트의 기록은 건너뜁니다.</p>
+        <input type="file" id="imFile" accept=".json,application/json">
+      </div>
+      <div class="panel hidden" id="migratePanel">
+        <h3>로컬 기록 → Firebase로 옮기기</h3>
+        <p>이 기기에 로컬 모드로 저장된 기록 <b id="localCnt">0</b>건이 있습니다.</p>
+        <button class="btn pri" id="btnMigrate">Firebase로 옮기기</button>
+      </div>
+    </div>
+  </main>
+</section>
+
+<!-- 설정 모달 -->
+<div id="settingsModal" class="modal hidden">
+  <div class="box">
+    <h3 style="margin-top:0">Firebase 설정</h3>
+    <p class="who">Firebase 콘솔 → 프로젝트 설정 → 내 앱(웹)의 <b>firebaseConfig</b> 코드를 그대로 붙여넣으세요. (이 기기 브라우저에 저장됩니다)</p>
+    <textarea id="cfgText" placeholder='const firebaseConfig = { apiKey: "...", authDomain: "...", projectId: "...", ... };'></textarea>
+    <div class="actions">
+      <button class="btn pri" id="cfgSave">저장 후 새로고침</button>
+      <button class="btn warn" id="cfgClear">설정 지우기</button>
+      <button class="btn" id="cfgClose">닫기</button>
+    </div>
+  </div>
+</div>
+
+<div id="toast"></div>
+
+<script>
+/* =========================================================
+   1) Firebase 설정 — 여기에 직접 넣거나, 화면의 [설정]에서 붙여넣기
+   ========================================================= */
+const FIREBASE_CONFIG = {
+  apiKey: "",
+  authDomain: "",
+  projectId: "",
+  storageBucket: "",
+  messagingSenderId: "",
+  appId: ""
+};
+// 허용할 Google 계정(비우면 로그인한 누구나 '자기 기록'만 사용). 예: ["bin4u001@gmail.com"]
+const ALLOWED_EMAILS = [];
+const COL = 'claude_logs';          // users/{uid}/claude_logs
+const LS_CFG = 'cdash_fbcfg';
+const LS_LOCAL = 'cdash_local_logs';
+const LS_MODE = 'cdash_mode';
+
+/* ================= 공통 유틸 ================= */
+const $ = s => document.querySelector(s);
+const esc = s => String(s == null ? '' : s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+function lsGet(k){ try { return localStorage.getItem(k); } catch(e){ return null; } }
+function lsSet(k,v){ try { localStorage.setItem(k,v); return true; } catch(e){ return false; } }
+function lsDel(k){ try { localStorage.removeItem(k); } catch(e){} }
+const pad = n => String(n).padStart(2,'0');
+function dateKey(ms){ const d=new Date(ms); return d.getFullYear()+'-'+(d.getMonth()+1)+'-'+d.getDate(); }
+function fmtDate(ms){ const d=new Date(ms); return d.getFullYear()+'-'+pad(d.getMonth()+1)+'-'+pad(d.getDate())+' '+pad(d.getHours())+':'+pad(d.getMinutes()); }
+let toastTimer=null;
+function toast(msg){ const t=$('#toast'); t.textContent=msg; t.classList.add('show'); clearTimeout(toastTimer); toastTimer=setTimeout(()=>t.classList.remove('show'),2500); }
+function parseTags(s){ return [...new Set(String(s||'').split(/[,#]/).map(x=>x.trim()).filter(Boolean))]; }
+function autoTitle(prompt){ const line=(String(prompt||'').split('\n').find(l=>l.trim())||'제목 없음').trim(); return line.length>40? line.slice(0,40)+'…' : line; }
+function toMs(v){
+  if(v==null) return Date.now();
+  if(typeof v==='number') return v;
+  if(typeof v.toMillis==='function') return v.toMillis();
+  const t=Date.parse(v); return isNaN(t)? Date.now() : t;
+}
+function normalize(x){
+  const createdAt=toMs(x.createdAt);
+  return {
+    id:x.id, title:String(x.title||''), prompt:String(x.prompt||''), answer:String(x.answer||''),
+    tags:Array.isArray(x.tags)? x.tags.map(String) : parseTags(x.tags),
+    project:String(x.project||''), model:String(x.model||''), note:String(x.note||''),
+    favorite:!!x.favorite, isTemplate:!!x.isTemplate, createdAt, dateKey:dateKey(createdAt)
+  };
+}
+async function copyText(text){
+  try { await navigator.clipboard.writeText(text); toast('복사했습니다'); }
+  catch(e){
+    const ta=document.createElement('textarea'); ta.value=text; document.body.appendChild(ta); ta.select();
+    try { document.execCommand('copy'); toast('복사했습니다'); } catch(e2){ toast('복사 실패'); }
+    ta.remove();
+  }
+}
+function download(name, blob){
+  const a=document.createElement('a'); a.href=URL.createObjectURL(blob); a.download=name;
+  document.body.appendChild(a); a.click(); a.remove(); setTimeout(()=>URL.revokeObjectURL(a.href),1000);
+}
+function stamp(){ const d=new Date(); return d.getFullYear()+pad(d.getMonth()+1)+pad(d.getDate())+'_'+pad(d.getHours())+pad(d.getMinutes()); }
+
+/* ================= 저장소: 로컬 / Firebase ================= */
+const LocalStore = {
+  kind:'local', cb:null,
+  load(){ try { const a=JSON.parse(lsGet(LS_LOCAL)||'[]'); return Array.isArray(a)? a : []; } catch(e){ return []; } },
+  save(a){ if(!lsSet(LS_LOCAL, JSON.stringify(a))) toast('이 브라우저에 저장할 수 없습니다(저장공간/개인정보 모드 확인)'); },
+  emit(){ if(this.cb) this.cb(this.load().map(normalize).sort((a,b)=>b.createdAt-a.createdAt)); },
+  subscribe(cb){ this.cb=cb; this.emit(); return ()=>{ this.cb=null; }; },
+  async add(d){ const a=this.load(); const now=Date.now();
+    a.push({...d, id:'L'+now+Math.random().toString(36).slice(2,7), createdAt:d.createdAt||now, updatedAt:now});
+    this.save(a); this.emit(); },
+  async update(id,d){ const a=this.load(); const i=a.findIndex(x=>x.id===id); if(i<0) return;
+    a[i]={...a[i], ...d, updatedAt:Date.now()}; this.save(a); this.emit(); },
+  async remove(id){ this.save(this.load().filter(x=>x.id!==id)); this.emit(); }
+};
+
+function makeFireStore(db, uid){
+  const col=db.collection('users').doc(uid).collection(COL);
+  const FV=firebase.firestore.FieldValue, TS=firebase.firestore.Timestamp;
+  return {
+    kind:'firebase',
+    subscribe(cb){
+      return col.orderBy('createdAt','desc').onSnapshot(
+        snap=>cb(snap.docs.map(doc=>normalize({id:doc.id, ...doc.data({serverTimestamps:'estimate'})}))),
+        err=>toast('DB 오류: '+err.message)
+      );
+    },
+    add(d){
+      const data={...d}; delete data.id;
+      data.createdAt = d.createdAt? TS.fromMillis(d.createdAt) : FV.serverTimestamp();
+      data.updatedAt = FV.serverTimestamp();
+      return col.add(data);
+    },
+    update(id,d){ const data={...d}; delete data.id; delete data.createdAt; data.updatedAt=FV.serverTimestamp(); return col.doc(id).update(data); },
+    remove(id){ return col.doc(id).delete(); }
+  };
+}
+
+/* ================= 상태 ================= */
+let store=null, unsub=null, logs=[], editingId=null, curTab='list';
+const openIds=new Set();
+let charts={};
+
+function onData(arr){ logs=arr; refreshFilters(); renderList(); renderTpl(); if(curTab==='stats') renderStats(); }
+
+/* ================= 초기화 ================= */
+function getConfig(){
+  let cfg=null;
+  try { cfg=JSON.parse(lsGet(LS_CFG)||'null'); } catch(e){ cfg=null; }
+  if(!cfg || !cfg.apiKey) cfg=FIREBASE_CONFIG;
+  return (cfg && cfg.apiKey && cfg.projectId)? cfg : null;
+}
+function setBadge(kind){
+  const b=$('#modeBadge'); b.classList.remove('hidden','local');
+  if(kind==='local'){ b.textContent='로컬 모드'; b.classList.add('local'); }
+  else b.textContent='Firebase';
+}
+function showView(v){ $('#loginView').classList.toggle('hidden', v!=='login'); $('#appView').classList.toggle('hidden', v!=='app'); }
+
+function startLocal(){
+  if(unsub){ unsub(); unsub=null; }
+  store=LocalStore; setBadge('local'); $('#who').textContent='이 기기에만 저장';
+  $('#btnLogout').classList.toggle('hidden', !getConfig()); $('#btnLogout').textContent = getConfig()? '로그인 화면' : '로그아웃';
+  showView('app'); unsub=store.subscribe(onData); updateMigrate();
+}
+
+function init(){
+  bindUI();
+  const cfg=getConfig();
+  if(!cfg || typeof firebase==='undefined'){
+    if(!cfg) toast('Firebase 설정 전 — 로컬 모드로 실행합니다');
+    else toast('Firebase 라이브러리를 불러오지 못해 로컬 모드로 실행합니다');
+    startLocal(); return;
+  }
+  let db;
+  try { if(!firebase.apps.length) firebase.initializeApp(cfg); db=firebase.firestore(); }
+  catch(e){ toast('Firebase 초기화 실패: '+e.message); startLocal(); return; }
+  try { db.enablePersistence({synchronizeTabs:true}).catch(()=>{}); } catch(e){}
+  firebase.auth().getRedirectResult().catch(e=>toast('로그인 실패: '+e.message));
+  firebase.auth().onAuthStateChanged(u=>{
+    if(unsub){ unsub(); unsub=null; }
+    if(u){
+      if(ALLOWED_EMAILS.length && !ALLOWED_EMAILS.includes(u.email)){
+        toast('허용되지 않은 계정입니다: '+u.email); firebase.auth().signOut(); return;
+      }
+      lsDel(LS_MODE);
+      store=makeFireStore(db,u.uid); setBadge('firebase');
+      $('#who').textContent=u.email||''; $('#btnLogout').textContent='로그아웃'; $('#btnLogout').classList.remove('hidden');
+      showView('app'); unsub=store.subscribe(onData); updateMigrate();
+    } else if(lsGet(LS_MODE)==='local'){
+      startLocal();
+    } else {
+      store=null; logs=[]; $('#who').textContent=''; $('#modeBadge').classList.add('hidden');
+      $('#btnLogout').classList.add('hidden'); showView('login');
+    }
+  });
+}
+
+function login(){
+  const p=new firebase.auth.GoogleAuthProvider();
+  firebase.auth().signInWithPopup(p).catch(e=>{
+    if(e.code==='auth/popup-blocked' || e.code==='auth/operation-not-supported-in-this-environment') firebase.auth().signInWithRedirect(p);
+    else if(e.code!=='auth/popup-closed-by-user' && e.code!=='auth/cancelled-popup-request') toast('로그인 실패: '+e.message);
+  });
+}
+
+/* ================= 탭 ================= */
+function switchTab(t){
+  curTab=t;
+  document.querySelectorAll('#tabs button').forEach(b=>b.classList.toggle('on', b.dataset.tab===t));
+  ['list','form','stats','tpl','backup'].forEach(k=>$('#tab-'+k).classList.toggle('hidden', k!==t));
+  if(t==='stats') renderStats();
+  if(t==='form') renderTagChips();
+  if(t==='backup') updateMigrate();
+  window.scrollTo(0,0);
+}
+
+/* ================= 필터 / 목록 ================= */
+function uniq(arr){ return [...new Set(arr.filter(Boolean))].sort((a,b)=>a.localeCompare(b,'ko')); }
+function fillSelect(sel, values, allLabel){
+  const cur=sel.value;
+  sel.innerHTML='<option value="">'+allLabel+'</option>'+values.map(v=>'<option value="'+esc(v)+'">'+esc(v)+'</option>').join('');
+  sel.value = values.includes(cur)? cur : '';
+}
+function refreshFilters(){
+  const tags=uniq(logs.flatMap(l=>l.tags)), projects=uniq(logs.map(l=>l.project)), models=uniq(logs.map(l=>l.model));
+  fillSelect($('#fTag'), tags, '전체 태그');
+  fillSelect($('#fProject'), projects, '전체 프로젝트');
+  fillSelect($('#fModel'), models, '전체 모델');
+  $('#dlProject').innerHTML=projects.map(v=>'<option value="'+esc(v)+'">').join('');
+  $('#dlModel').innerHTML=uniq(['Claude Opus','Claude Sonnet','Claude Haiku',...models]).map(v=>'<option value="'+esc(v)+'">').join('');
+}
+function filtered(){
+  const words=$('#q').value.trim().toLowerCase().split(/\s+/).filter(Boolean);
+  const tag=$('#fTag').value, proj=$('#fProject').value, model=$('#fModel').value, star=$('#fStar').checked, sort=$('#fSort').value;
+  let r=logs.filter(l=>{
+    if(tag && !l.tags.includes(tag)) return false;
+    if(proj && l.project!==proj) return false;
+    if(model && l.model!==model) return false;
+    if(star && !l.favorite) return false;
+    if(words.length){
+      const hay=(l.title+'\n'+l.prompt+'\n'+l.answer+'\n'+l.note+'\n'+l.tags.join(' ')+'\n'+l.project+'\n'+l.model).toLowerCase();
+      if(!words.every(w=>hay.includes(w))) return false;
+    }
+    return true;
+  });
+  if(sort==='old') r.sort((a,b)=>a.createdAt-b.createdAt);
+  else if(sort==='title') r.sort((a,b)=>a.title.localeCompare(b.title,'ko'));
+  else r.sort((a,b)=>b.createdAt-a.createdAt);
+  return r;
+}
+function cardHtml(l){
+  const open=openIds.has(l.id);
+  const meta=[
+    l.model? '<span>'+esc(l.model)+'</span>' : '',
+    l.project? '<span>📁 '+esc(l.project)+'</span>' : '',
+    l.isTemplate? '<span class="tpl">템플릿</span>' : '',
+    ...l.tags.map(t=>'<span class="tag" data-act="tag" data-tag="'+esc(t)+'">#'+esc(t)+'</span>')
+  ].join('');
+  return '<div class="card" data-id="'+esc(l.id)+'">'+
+    '<div class="card-head" data-act="toggle">'+
+      '<button class="ic star'+(l.favorite?' on':'')+'" data-act="star" title="즐겨찾기">'+(l.favorite?'★':'☆')+'</button>'+
+      '<div class="c-title">'+esc(l.title||autoTitle(l.prompt))+'</div>'+
+      '<span class="c-date">'+fmtDate(l.createdAt)+'</span>'+
+    '</div>'+
+    (meta? '<div class="c-meta">'+meta+'</div>' : '')+
+    (open? '' : '<div class="c-preview" data-act="toggle">'+esc(l.prompt.slice(0,200).replace(/\s+/g,' '))+'</div>')+
+    (open? '<div class="c-body">'+
+      '<div class="lbl">프롬프트 <button class="btn" data-act="copyP">복사</button></div><div class="txt">'+esc(l.prompt)+'</div>'+
+      '<div class="lbl">답변 <button class="btn" data-act="copyA">복사</button></div><div class="txt">'+esc(l.answer)+'</div>'+
+      (l.note? '<div class="lbl">메모</div><div class="txt">'+esc(l.note)+'</div>' : '')+
+      '<div class="actions">'+
+        '<button class="btn" data-act="edit">수정</button>'+
+        '<button class="btn" data-act="tplToggle">'+(l.isTemplate?'템플릿 해제':'템플릿 지정')+'</button>'+
+        '<button class="btn" data-act="reuse">이 프롬프트로 새 기록</button>'+
+        '<button class="btn warn" data-act="del">삭제</button>'+
+      '</div></div>' : '')+
+  '</div>';
+}
+function renderList(){
+  const r=filtered();
+  $('#count').textContent='전체 '+logs.length+'건 중 '+r.length+'건';
+  $('#list').innerHTML = r.length? r.map(cardHtml).join('') :
+    '<div class="empty">'+(logs.length? '조건에 맞는 기록이 없습니다.' : '아직 기록이 없습니다. [새 기록] 탭에서 대화를 붙여넣어 보세요.')+'</div>';
+}
+function renderTpl(){
+  const r=logs.filter(l=>l.isTemplate).sort((a,b)=>a.title.localeCompare(b.title,'ko'));
+  $('#tplList').innerHTML = r.length? r.map(l=>
+    '<div class="card" data-id="'+esc(l.id)+'">'+
+      '<div class="card-head"><div class="c-title">'+esc(l.title||autoTitle(l.prompt))+'</div>'+
+      '<button class="btn" data-act="copyP">프롬프트 복사</button> <button class="btn" data-act="reuse">새 기록에 사용</button></div>'+
+      '<div class="txt" style="margin-top:8px">'+esc(l.prompt)+'</div>'+
+    '</div>').join('') : '<div class="empty">템플릿이 없습니다.</div>';
+}
+
+let delTimer=null;
+async function handleAct(e){
+  const el=e.target.closest('[data-act]'); if(!el) return;
+  const card=el.closest('[data-id]'); const act=el.dataset.act;
+  if(act==='tag'){ e.stopPropagation(); $('#fTag').value=el.dataset.tag; switchTab('list'); renderList(); return; }
+  if(!card) return;
+  const l=logs.find(x=>x.id===card.dataset.id); if(!l) return;
+  e.stopPropagation();
+  try {
+    switch(act){
+      case 'toggle': openIds.has(l.id)? openIds.delete(l.id) : openIds.add(l.id); renderList(); break;
+      case 'star': await store.update(l.id,{favorite:!l.favorite}); break;
+      case 'copyP': copyText(l.prompt); break;
+      case 'copyA': copyText(l.answer); break;
+      case 'edit': startEdit(l); break;
+      case 'tplToggle': await store.update(l.id,{isTemplate:!l.isTemplate}); toast(l.isTemplate?'템플릿 해제':'템플릿으로 지정했습니다'); break;
+      case 'reuse': clearForm(); $('#iPrompt').value=l.prompt; $('#iTags').value=l.tags.join(', '); $('#iProject').value=l.project; switchTab('form'); break;
+      case 'del':
+        if(!el.classList.contains('confirm')){
+          el.classList.add('confirm'); el.textContent='한 번 더 누르면 삭제';
+          clearTimeout(delTimer); delTimer=setTimeout(()=>{ el.classList.remove('confirm'); el.textContent='삭제'; },3000);
+        } else { clearTimeout(delTimer); openIds.delete(l.id); await store.remove(l.id); toast('삭제했습니다'); }
+        break;
+    }
+  } catch(err){ toast('실패: '+err.message); }
+}
+
+/* ================= 입력 폼 ================= */
+function clearForm(){
+  editingId=null;
+  ['iTitle','iPrompt','iAnswer','iTags','iProject','iModel','iNote'].forEach(id=>$('#'+id).value='');
+  $('#iFav').checked=false; $('#iTpl').checked=false;
+  $('#editInfo').textContent=''; $('#btnSave').textContent='저장';
+}
+function startEdit(l){
+  clearForm(); editingId=l.id;
+  $('#iTitle').value=l.title; $('#iPrompt').value=l.prompt; $('#iAnswer').value=l.answer;
+  $('#iTags').value=l.tags.join(', '); $('#iProject').value=l.project; $('#iModel').value=l.model; $('#iNote').value=l.note;
+  $('#iFav').checked=l.favorite; $('#iTpl').checked=l.isTemplate;
+  $('#editInfo').textContent='수정 중: '+fmtDate(l.createdAt)+' 기록'; $('#btnSave').textContent='수정 저장';
+  switchTab('form');
+}
+function renderTagChips(){
+  const tags=uniq(logs.flatMap(l=>l.tags)).slice(0,40);
+  $('#tagChips').innerHTML=tags.map(t=>'<span class="tag" data-chip="'+esc(t)+'">#'+esc(t)+'</span>').join('');
+}
+let saving=false;
+async function saveForm(){
+  if(saving || !store) return;
+  const prompt=$('#iPrompt').value, answer=$('#iAnswer').value;
+  if(!prompt.trim() && !answer.trim()){ toast('프롬프트나 답변 중 하나는 입력해야 합니다'); return; }
+  const createdMs = editingId? (logs.find(x=>x.id===editingId)||{}).createdAt : Date.now();
+  const data={
+    title: $('#iTitle').value.trim() || autoTitle(prompt || answer),
+    prompt, answer, tags: parseTags($('#iTags').value),
+    project: $('#iProject').value.trim(), model: $('#iModel').value.trim(), note: $('#iNote').value,
+    favorite: $('#iFav').checked, isTemplate: $('#iTpl').checked, dateKey: dateKey(createdMs||Date.now())
+  };
+  saving=true; $('#btnSave').disabled=true;
+  try {
+    if(editingId){ await store.update(editingId, data); toast('수정했습니다'); }
+    else { await store.add(data); toast('저장했습니다'); }
+    clearForm(); switchTab('list');
+  } catch(e){ toast('저장 실패: '+e.message); }
+  finally { saving=false; $('#btnSave').disabled=false; }
+}
+
+/* ================= 통계 ================= */
+function renderStats(){
+  const now=new Date(), ym=now.getFullYear()+'-'+(now.getMonth()+1)+'-';
+  $('#sTotal').textContent=logs.length;
+  $('#sMonth').textContent=logs.filter(l=>l.dateKey.startsWith(ym)).length;
+  $('#sFav').textContent=logs.filter(l=>l.favorite).length;
+  $('#sTpl').textContent=logs.filter(l=>l.isTemplate).length;
+  if(typeof Chart==='undefined') return;
+  Object.values(charts).forEach(c=>c.destroy()); charts={};
+  const accent='#c96442';
+  // 최근 30일
+  const labels=[], keys=[];
+  for(let i=29;i>=0;i--){ const d=new Date(now.getFullYear(),now.getMonth(),now.getDate()-i); keys.push(dateKey(d.getTime())); labels.push((d.getMonth()+1)+'/'+d.getDate()); }
+  const cnt={}; logs.forEach(l=>{ cnt[l.dateKey]=(cnt[l.dateKey]||0)+1; });
+  charts.daily=new Chart($('#chDaily'),{type:'bar',data:{labels,datasets:[{data:keys.map(k=>cnt[k]||0),backgroundColor:accent,borderRadius:3}]},
+    options:{plugins:{legend:{display:false}},scales:{y:{beginAtZero:true,ticks:{precision:0}},x:{grid:{display:false}}}}});
+  // 태그
+  const tc={}; logs.forEach(l=>l.tags.forEach(t=>{ tc[t]=(tc[t]||0)+1; }));
+  const topT=Object.entries(tc).sort((a,b)=>b[1]-a[1]).slice(0,10);
+  charts.tag=new Chart($('#chTag'),{type:'bar',data:{labels:topT.map(x=>x[0]),datasets:[{data:topT.map(x=>x[1]),backgroundColor:accent,borderRadius:3}]},
+    options:{indexAxis:'y',plugins:{legend:{display:false}},scales:{x:{beginAtZero:true,ticks:{precision:0}}}}});
+  // 모델
+  const mc={}; logs.forEach(l=>{ const k=l.model||'미지정'; mc[k]=(mc[k]||0)+1; });
+  const me=Object.entries(mc).sort((a,b)=>b[1]-a[1]);
+  const palette=['#c96442','#3a7ca5','#6a994e','#e0a100','#8e6c8a','#9c9589','#d17a9a','#4f5d75'];
+  charts.model=new Chart($('#chModel'),{type:'doughnut',data:{labels:me.map(x=>x[0]),datasets:[{data:me.map(x=>x[1]),backgroundColor:me.map((_,i)=>palette[i%palette.length])}]},
+    options:{plugins:{legend:{position:'bottom'}}}});
+}
+
+/* ================= 백업 ================= */
+function exportRows(){ return [...logs].sort((a,b)=>a.createdAt-b.createdAt); }
+function exJson(){
+  const data=exportRows().map(l=>({...l, id:undefined, createdAt:new Date(l.createdAt).toISOString()}));
+  download('claude_logs_'+stamp()+'.json', new Blob([JSON.stringify({app:'claude-dashboard',version:1,count:data.length,logs:data},null,2)],{type:'application/json'}));
+}
+function exXlsx(){
+  if(typeof XLSX==='undefined'){ toast('엑셀 라이브러리를 불러오지 못했습니다'); return; }
+  const cut=s=>s.length>32000? s.slice(0,32000)+'…(잘림)' : s;
+  const rows=exportRows().map(l=>({'날짜':fmtDate(l.createdAt),'제목':l.title,'프롬프트':cut(l.prompt),'답변':cut(l.answer),
+    '태그':l.tags.join(', '),'프로젝트':l.project,'모델':l.model,'즐겨찾기':l.favorite?'Y':'','템플릿':l.isTemplate?'Y':'','메모':cut(l.note)}));
+  const ws=XLSX.utils.json_to_sheet(rows);
+  ws['!cols']=[{wch:17},{wch:30},{wch:60},{wch:80},{wch:20},{wch:16},{wch:14},{wch:8},{wch:8},{wch:30}];
+  const wb=XLSX.utils.book_new(); XLSX.utils.book_append_sheet(wb, ws, 'Claude기록');
+  XLSX.writeFile(wb, 'claude_logs_'+stamp()+'.xlsx');
+}
+function exMd(){
+  const md=['# Claude 대화 기록','','내보낸 날짜: '+fmtDate(Date.now())+' / '+logs.length+'건',''];
+  exportRows().forEach(l=>{
+    md.push('---','','## '+(l.title||autoTitle(l.prompt)),'',
+      '- 날짜: '+fmtDate(l.createdAt),
+      l.model? '- 모델: '+l.model : '', l.project? '- 프로젝트: '+l.project : '',
+      l.tags.length? '- 태그: '+l.tags.map(t=>'#'+t).join(' ') : '',
+      l.favorite? '- ★ 즐겨찾기' : '', '',
+      '### 프롬프트','',l.prompt,'','### 답변','',l.answer,'');
+    if(l.note) md.push('### 메모','',l.note,'');
+  });
+  download('claude_logs_'+stamp()+'.md', new Blob([md.filter((x,i,a)=>!(x===''&&a[i-1]==='')).join('\n')],{type:'text/markdown'}));
+}
+async function importFile(file){
+  if(!file || !store) return;
+  let arr;
+  try { const j=JSON.parse(await file.text()); arr=Array.isArray(j)? j : j.logs; if(!Array.isArray(arr)) throw new Error('형식 오류'); }
+  catch(e){ toast('JSON을 읽을 수 없습니다: '+e.message); return; }
+  const n=await bulkAdd(arr, store);
+  toast(n.added+'건 추가, '+n.skipped+'건 중복 건너뜀');
+  $('#imFile').value='';
+}
+function sig(l){ return l.createdAt+'|'+l.title+'|'+l.prompt.slice(0,100); }
+async function bulkAdd(arr, target){
+  const have=new Set(logs.map(sig)); let added=0, skipped=0;
+  for(const raw of arr){
+    const l=normalize(raw);
+    if(have.has(sig(l))){ skipped++; continue; }
+    const {id, ...data}=l;
+    await target.add(data); have.add(sig(l)); added++;
+  }
+  return {added, skipped};
+}
+function updateMigrate(){
+  const n=LocalStore.load().length;
+  const show = store && store.kind==='firebase' && n>0;
+  $('#migratePanel').classList.toggle('hidden', !show);
+  $('#localCnt').textContent=n;
+}
+async function migrate(){
+  if(!store || store.kind!=='firebase') return;
+  const btn=$('#btnMigrate'); btn.disabled=true;
+  try {
+    const r=await bulkAdd(LocalStore.load(), store);
+    lsDel(LS_LOCAL); updateMigrate();
+    toast(r.added+'건을 Firebase로 옮겼습니다');
+  } catch(e){ toast('옮기기 실패: '+e.message); }
+  finally { btn.disabled=false; }
+}
+
+/* ================= 설정 ================= */
+function parseConfig(text){
+  const m=String(text).match(/\{[\s\S]*\}/); if(!m) throw new Error('{ } 부분을 찾을 수 없습니다');
+  let s=m[0];
+  try { return JSON.parse(s); } catch(e){}
+  s=s.replace(/\/\/.*$/gm,'').replace(/([{,]\s*)([A-Za-z_$][\w$]*)\s*:/g,'$1"$2":').replace(/'/g,'"').replace(/,\s*\}/g,'}');
+  return JSON.parse(s);
+}
+
+/* ================= 이벤트 연결 ================= */
+function bindUI(){
+  $('#tabs').addEventListener('click', e=>{ const b=e.target.closest('button[data-tab]'); if(!b) return; if(b.dataset.tab==='form' && !editingId) clearForm(); switchTab(b.dataset.tab); });
+  $('#list').addEventListener('click', handleAct);
+  $('#tplList').addEventListener('click', handleAct);
+  ['#q','#fTag','#fProject','#fModel','#fStar','#fSort'].forEach(s=>$(s).addEventListener(s==='#q'?'input':'change', renderList));
+  $('#btnReset').onclick=()=>{ $('#q').value=''; ['#fTag','#fProject','#fModel'].forEach(s=>$(s).value=''); $('#fStar').checked=false; $('#fSort').value='new'; renderList(); };
+  $('#btnSave').onclick=saveForm;
+  $('#btnClear').onclick=clearForm;
+  $('#tagChips').addEventListener('click', e=>{ const c=e.target.closest('[data-chip]'); if(!c) return;
+    const t=parseTags($('#iTags').value); if(!t.includes(c.dataset.chip)) t.push(c.dataset.chip); $('#iTags').value=t.join(', '); });
+  document.querySelectorAll('[data-paste]').forEach(b=>b.addEventListener('click', async ()=>{
+    try { const t=await navigator.clipboard.readText(); const ta=$('#'+b.dataset.paste); ta.value = ta.value? ta.value+'\n'+t : t; }
+    catch(e){ toast('클립보드 접근이 막혀 있습니다. 칸을 길게 눌러 붙여넣어 주세요'); }
+  }));
+  document.addEventListener('keydown', e=>{ if(curTab==='form' && (e.ctrlKey||e.metaKey) && e.key==='Enter'){ e.preventDefault(); saveForm(); } });
+  $('#exJson').onclick=exJson; $('#exXlsx').onclick=exXlsx; $('#exMd').onclick=exMd;
+  $('#imFile').addEventListener('change', e=>importFile(e.target.files[0]));
+  $('#btnMigrate').onclick=migrate;
+  $('#btnLogin').onclick=login;
+  $('#btnUseLocal').onclick=()=>{ lsSet(LS_MODE,'local'); startLocal(); };
+  $('#btnLogout').onclick=()=>{
+    lsDel(LS_MODE);
+    if(typeof firebase!=='undefined' && firebase.apps.length && firebase.auth().currentUser) firebase.auth().signOut();
+    else if(getConfig()){ if(unsub){unsub();unsub=null;} store=null; logs=[]; $('#modeBadge').classList.add('hidden'); $('#who').textContent=''; $('#btnLogout').classList.add('hidden'); showView('login'); }
+  };
+  $('#btnSettings').onclick=()=>{ let v=''; try { const c=lsGet(LS_CFG); v = c? JSON.stringify(JSON.parse(c),null,2) : ''; } catch(e){} $('#cfgText').value=v; $('#settingsModal').classList.remove('hidden'); };
+  $('#cfgClose').onclick=()=>$('#settingsModal').classList.add('hidden');
+  $('#cfgClear').onclick=()=>{ lsDel(LS_CFG); toast('설정을 지웠습니다'); setTimeout(()=>location.reload(),600); };
+  $('#cfgSave').onclick=()=>{
+    try { const c=parseConfig($('#cfgText').value); if(!c.apiKey || !c.projectId) throw new Error('apiKey, projectId가 필요합니다');
+      if(!lsSet(LS_CFG, JSON.stringify(c))) throw new Error('브라우저 저장 불가 — 코드의 FIREBASE_CONFIG에 직접 넣어주세요');
+      toast('저장했습니다. 새로고침합니다'); setTimeout(()=>location.reload(),600);
+    } catch(e){ toast('설정 오류: '+e.message); }
+  };
+}
+
+init();
+</script>
+</body>
+</html>
